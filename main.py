@@ -157,7 +157,7 @@ async def get_analysis_chart(period: str = "1y"):
         analysis_df['benchmark_return'] = analysis_df['benchmark_close'].pct_change()
         analysis_df['abnormal_return'] = analysis_df['target_return'] - analysis_df['benchmark_return']
         std_dev = analysis_df['abnormal_return'].std()
-        spike_threshold = 1.5 * std_dev
+        spike_threshold = 1.75 * std_dev
         events_df = pd.DataFrame(KEY_EVENTS_DATA); events_df['date'] = pd.to_datetime(events_df['date']); events_df.set_index('date', inplace=True)
         chart_data_points = {}
         spike_dates = analysis_df[analysis_df['abnormal_return'].abs() > spike_threshold].index
@@ -176,7 +176,6 @@ async def get_analysis_chart(period: str = "1y"):
 @app.get("/analysis/summary", response_model=SummaryResponse)
 async def get_ai_summary():
     try:
-        
         snapshot_data = await get_volatility_snapshot()
         vol_30d = snapshot_data['30-day']['target']['volatility']
         comparison_factor = snapshot_data['30-day']['comparison']['vs_average']
@@ -186,22 +185,26 @@ async def get_ai_summary():
         
         latest_event = sorted(KEY_EVENTS_DATA, key=lambda x: x['date'], reverse=True)[0]
 
+        vol_30d_float = float(vol_30d)
+        comparison_factor_float = float(comparison_factor)
+        price_change_float = float(price_change_percent)
+        
         prompt = f'''
         You are a financial analyst providing a brief, objective summary for a dashboard. Based on the following data for MicroPort Scientific (0853.HK), generate a 2-3 sentence professional summary. Do not give financial advice or use speculative language.
 
-        - Current 30-Day Volatility: {vol_30d:.2%}
-        - Volatility vs Market/Peer Average: {comparison_factor:.2f}x higher
-        - Last 24h Price Change: {price_change_percent:.2f}%
+        - Current 30-Day Volatility: {vol_30d_float:.2%}
+        - Volatility vs Market/Peer Average: {comparison_factor_float:.2f}x higher
+        - Last 24h Price Change: {price_change_float:.2f}%
         - Latest Major Event ({latest_event['date']}): {latest_event['headline']}
 
         Generate the summary now.
         '''
 
-        if not genai._client:
+        if GOOGLE_API_KEY == "YOUR_GOOGLE_API_KEY":
             raise HTTPException(status_code=500, detail="Google AI API key not configured.")
         
-        model = genai.GenerativeModel('gemini-pro')
-        response = await model.generate_content_async(prompt)
+        model = genai.GenerativeModel('gemini-1.5-flash')
+        response = model.generate_content(prompt)
         
         return SummaryResponse(summary=response.text)
 

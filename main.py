@@ -157,7 +157,7 @@ async def get_analysis_chart(period: str = "1y"):
         analysis_df['benchmark_return'] = analysis_df['benchmark_close'].pct_change()
         analysis_df['abnormal_return'] = analysis_df['target_return'] - analysis_df['benchmark_return']
         std_dev = analysis_df['abnormal_return'].std()
-        spike_threshold = 1.75 * std_dev
+        spike_threshold = 1.5 * std_dev
         events_df = pd.DataFrame(KEY_EVENTS_DATA); events_df['date'] = pd.to_datetime(events_df['date']); events_df.set_index('date', inplace=True)
         chart_data_points = {}
         spike_dates = analysis_df[analysis_df['abnormal_return'].abs() > spike_threshold].index

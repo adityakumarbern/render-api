@@ -203,7 +203,7 @@ async def get_ai_summary():
         if GOOGLE_API_KEY == "YOUR_GOOGLE_API_KEY":
             raise HTTPException(status_code=500, detail="Google AI API key not configured.")
         
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        model = genai.GenerativeModel('gemini-2.0-flash')
         response = model.generate_content(prompt)
         
         return SummaryResponse(summary=response.text)

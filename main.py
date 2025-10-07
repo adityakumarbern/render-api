@@ -9,6 +9,7 @@ from typing import Optional, List, Dict
 
 NEWS_API_KEY = os.getenv("NEWS_API_KEY", "YOUR_NEWS_API_KEY")
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY", "YOUR_GOOGLE_API_KEY")
+
 NEWS_API_URL = "https://newsapi.org/v2/everything"
 
 if GOOGLE_API_KEY and GOOGLE_API_KEY != "YOUR_GOOGLE_API_KEY":
@@ -17,7 +18,7 @@ if GOOGLE_API_KEY and GOOGLE_API_KEY != "YOUR_GOOGLE_API_KEY":
 app = FastAPI(
     title="Equity Research API",
     description="Provides endpoints for stock history, news, volatility, and AI-powered analysis.",
-    version="4.1.0",
+    version="2.0",
 )
 
 class StockRequest(BaseModel):
@@ -60,17 +61,18 @@ class AnalysisChartResponse(BaseModel):
 class SummaryResponse(BaseModel):
     summary: str
 
-class DashboardMetric(BaseModel):
-    label: str
+# --- START: New Models for Dashboard Endpoint ---
+class Metric(BaseModel):
     value: str
-    change: float
-    change_type: str
+    percent_change: float
 
 class DashboardTopResponse(BaseModel):
-    market_cap: DashboardMetric
-    eps: DashboardMetric
-    revenue: DashboardMetric
-    daily_move: DashboardMetric
+    market_cap: Metric
+    eps: Metric
+    revenue: Metric
+    daily_percent_move: float
+# --- END: New Models for Dashboard Endpoint ---
+
 
 KEY_EVENTS_DATA = [
     {"date": "2024-10-17", "source": "Bloomberg.com", "headline": "Otsuka Is Said to Weigh Sale of Stake in Medical Device Maker MicroPort Scientific", "url": "https://www.bloomberg.com/news/articles/2024-10-17/otsuka-weighs-sale-of-stake-in-medical-device-maker-microport-scientific"},
@@ -133,9 +135,9 @@ async def get_volatility_snapshot():
             latest_vol_peer = rolling_vol["MDT"].iloc[-1]
             avg_comparison_vol = (latest_vol_benchmark + latest_vol_peer) / 2
             comparison = {
-                "vs_benchmark": round(latest_vol_target / latest_vol_benchmark, 2) if latest_vol_benchmark else 0,
-                "vs_peer": round(latest_vol_target / latest_vol_peer, 2) if latest_vol_peer else 0,
-                "vs_average": round(latest_vol_target / avg_comparison_vol, 2) if avg_comparison_vol else 0
+                "vs_benchmark": round(latest_vol_target / latest_vol_benchmark, 2),
+                "vs_peer": round(latest_vol_target / latest_vol_peer, 2),
+                "vs_average": round(latest_vol_target / avg_comparison_vol, 2)
             }
             response[f"{window}-day"] = {
                 "target": {"ticker": "0853.HK", "volatility": round(latest_vol_target, 4)},
@@ -222,46 +224,45 @@ async def get_ai_summary():
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"An error occurred while generating the AI summary: {str(e)}")
 
-
-
 @app.get("/dashboard/top", response_model=DashboardTopResponse)
-async def get_dashboard_top():
+async def get_top_dashboard_data():
+
     try:
-        ticker = "0853.HK"
-        stock = yf.Ticker(ticker)
-        info = stock.info
-        hist_data = yf.download(tickers=ticker, period="1y", progress=False)
+        ticker_symbol = "0853.HK"
+        ticker = yf.Ticker(ticker_symbol)
+        info = ticker.info
 
-        market_cap = info.get('marketCap')
-        market_cap_value = f"${market_cap / 1e9:.1f}B" if market_cap else "N/A"
-        price_change_1y = 0.0
-        if not hist_data.empty and len(hist_data) >= 252:
-            price_1y_ago = hist_data['Close'].iloc[0]
-            current_price = hist_data['Close'].iloc[-1]
-            if price_1y_ago:
-                price_change_1y = ((current_price - price_1y_ago) / price_1y_ago) * 100
-        market_cap_metric = DashboardMetric(label="Market Cap", value=market_cap_value, change=round(price_change_1y, 2), change_type="up" if price_change_1y >= 0 else "down")
-
-        eps = info.get('trailingEps')
-        eps_value = f"${eps:.2f}" if eps is not None else "N/A"
-        eps_change_raw = info.get('earningsQuarterlyGrowth')
-        eps_change = eps_change_raw * 100 if eps_change_raw is not None else 0.0
-        eps_metric = DashboardMetric(label="EPS", value=eps_value, change=round(eps_change, 2), change_type="up" if eps_change >= 0 else "down")
-
-        revenue = info.get('totalRevenue')
-        revenue_value = f"${revenue / 1e9:.2f}B" if revenue else "N/A"
-        revenue_change_raw = info.get('revenueGrowth')
-        revenue_change = revenue_change_raw * 100 if revenue_change_raw is not None else 0.0
-        revenue_metric = DashboardMetric(label="Revenue", value=revenue_value, change=round(revenue_change, 2), change_type="up" if revenue_change >= 0 else "down")
+        hist = yf.download(ticker_symbol, period="2d", progress=False)
+        if hist.empty or len(hist) < 2:
+            raise HTTPException(status_code=404, detail="Not enough historical data for daily move calculation.")
         
-        daily_move_percent = 0.0
-        if not hist_data.empty and len(hist_data) >= 2:
-            daily_move_scalar = hist_data['Close'].pct_change().iloc[-1]
-            if pd.notna(daily_move_scalar):
-                daily_move_percent = daily_move_scalar * 100
-        daily_move_metric = DashboardMetric(label="Daily % Move", value=f"{daily_move_percent:.2f}%", change=round(daily_move_percent, 2), change_type="up" if daily_move_percent >= 0 else "down")
+        daily_move = hist['Close'].pct_change().iloc[-1]
 
-        return DashboardTopResponse(market_cap=market_cap_metric, eps=eps_metric, revenue=revenue_metric, daily_move=daily_move_metric)
+        def format_large_number(num: Optional[float]) -> str:
+            if num is None: return "N/A"
+            if abs(num) >= 1_000_000_000:
+                return f"${num / 1_000_000_000:.2f}B"
+            if abs(num) >= 1_000_000:
+                return f"${num / 1_000_000:.2f}M"
+            return f"${num:,.2f}"
+
+        response_data = {
+            "market_cap": {
+                "value": format_large_number(info.get('marketCap')),
+                "percent_change": daily_move
+            },
+            "eps": {
+                "value": f"${info.get('trailingEps', 0):.2f}",
+                "percent_change": info.get('earningsQuarterlyGrowth') or 0
+            },
+            "revenue": {
+                "value": format_large_number(info.get('totalRevenue')),
+                "percent_change": info.get('revenueGrowth') or 0
+            },
+            "daily_percent_move": daily_move
+        }
+        
+        return response_data
+        
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"An error occurred while fetching dashboard data: {str(e)}")
-

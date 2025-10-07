@@ -61,17 +61,17 @@ class AnalysisChartResponse(BaseModel):
 class SummaryResponse(BaseModel):
     summary: str
 
-# --- START: New Models for Dashboard Endpoint ---
+# --- START: Models for Dashboard Endpoint (Updated Response Type) ---
 class Metric(BaseModel):
     value: str
-    percent_change: float
+    percent_change: str # Changed from float to str
 
 class DashboardTopResponse(BaseModel):
     market_cap: Metric
     eps: Metric
     revenue: Metric
-    daily_percent_move: float
-# --- END: New Models for Dashboard Endpoint ---
+    daily_percent_move: str # Changed from float to str
+# --- END: Models for Dashboard Endpoint ---
 
 
 KEY_EVENTS_DATA = [
@@ -246,21 +246,28 @@ async def get_top_dashboard_data():
                 return f"${num / 1_000_000:.2f}M"
             return f"${num:,.2f}"
 
+        
+        market_cap_pc = daily_move
+        eps_pc = info.get('earningsQuarterlyGrowth') or 0
+        revenue_pc = info.get('revenueGrowth') or 0
+        daily_move_pc = daily_move
+
         response_data = {
             "market_cap": {
                 "value": format_large_number(info.get('marketCap')),
-                "percent_change": daily_move
+                "percent_change": f"{market_cap_pc * 100:.2f}%"
             },
             "eps": {
                 "value": f"${info.get('trailingEps', 0):.2f}",
-                "percent_change": info.get('earningsQuarterlyGrowth') or 0
+                "percent_change": f"{eps_pc * 100:.2f}%"
             },
             "revenue": {
                 "value": format_large_number(info.get('totalRevenue')),
-                "percent_change": info.get('revenueGrowth') or 0
+                "percent_change": f"{revenue_pc * 100:.2f}%"
             },
-            "daily_percent_move": daily_move
+            "daily_percent_move": f"{daily_move_pc * 100:.2f}%"
         }
+       
         
         return response_data
         

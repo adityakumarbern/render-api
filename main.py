@@ -9,7 +9,6 @@ from typing import Optional, List, Dict
 
 NEWS_API_KEY = os.getenv("NEWS_API_KEY", "YOUR_NEWS_API_KEY")
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY", "YOUR_GOOGLE_API_KEY")
-
 NEWS_API_URL = "https://newsapi.org/v2/everything"
 
 if GOOGLE_API_KEY and GOOGLE_API_KEY != "YOUR_GOOGLE_API_KEY":
@@ -18,7 +17,7 @@ if GOOGLE_API_KEY and GOOGLE_API_KEY != "YOUR_GOOGLE_API_KEY":
 app = FastAPI(
     title="Equity Research API",
     description="Provides endpoints for stock history, news, volatility, and AI-powered analysis.",
-    version="4.0.0",
+    version="4.1.0",
 )
 
 class StockRequest(BaseModel):
@@ -134,9 +133,9 @@ async def get_volatility_snapshot():
             latest_vol_peer = rolling_vol["MDT"].iloc[-1]
             avg_comparison_vol = (latest_vol_benchmark + latest_vol_peer) / 2
             comparison = {
-                "vs_benchmark": round(latest_vol_target / latest_vol_benchmark, 2),
-                "vs_peer": round(latest_vol_target / latest_vol_peer, 2),
-                "vs_average": round(latest_vol_target / avg_comparison_vol, 2)
+                "vs_benchmark": round(latest_vol_target / latest_vol_benchmark, 2) if latest_vol_benchmark else 0,
+                "vs_peer": round(latest_vol_target / latest_vol_peer, 2) if latest_vol_peer else 0,
+                "vs_average": round(latest_vol_target / avg_comparison_vol, 2) if avg_comparison_vol else 0
             }
             response[f"{window}-day"] = {
                 "target": {"ticker": "0853.HK", "volatility": round(latest_vol_target, 4)},
@@ -223,98 +222,40 @@ async def get_ai_summary():
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"An error occurred while generating the AI summary: {str(e)}")
 
+
+
 @app.get("/dashboard/top", response_model=DashboardTopResponse)
 async def get_dashboard_top():
     try:
         ticker = "0853.HK"
         stock = yf.Ticker(ticker)
         info = stock.info
-        
-        hist_data_1y = yf.download(tickers=ticker, period="1y", progress=False)
-        hist_data_2y = yf.download(tickers=ticker, period="2y", progress=False)
-        
-        current_market_cap = info.get('marketCap', 0)
-        if current_market_cap is not None and current_market_cap > 0 and len(hist_data_2y) >= 252:
-            price_1y_ago = hist_data_2y['Close'].iloc[0]
-            current_price = hist_data_1y['Close'].iloc[-1]
-            shares_outstanding = info.get('sharesOutstanding', 0)
-            if shares_outstanding is not None and shares_outstanding > 0 and price_1y_ago > 0:
-                market_cap_1y_ago = price_1y_ago * shares_outstanding
-                market_cap_change = ((current_market_cap - market_cap_1y_ago) / market_cap_1y_ago) * 100
-            else:
-                market_cap_change = 0
-        else:
-            market_cap_change = 0
-        
-        market_cap_value = f"${current_market_cap / 1e9:.1f}B" if current_market_cap else "N/A"
-        market_cap_metric = DashboardMetric(
-            label="Market Cap",
-            value=market_cap_value,
-            change=round(market_cap_change, 2),
-            change_type="up" if market_cap_change >= 0 else "down"
-        )
-        
-        trailing_eps = info.get('trailingEps', None)
-        forward_eps = info.get('forwardEps', None)
-        current_eps = trailing_eps if trailing_eps else forward_eps
-        
-        if current_eps is not None and current_eps > 0:
-            hist_data_5y = yf.download(tickers=ticker, period="5y", progress=False)
-            if len(hist_data_5y) >= 252:
-                old_price = hist_data_5y['Close'].iloc[0]
-                current_price = hist_data_1y['Close'].iloc[-1]
-                estimated_eps_change = ((current_price - old_price) / old_price) * 100
-            else:
-                estimated_eps_change = 0
-        else:
-            current_eps = 0
-            estimated_eps_change = 0
-        
-        eps_value = f"${current_eps:.2f}" if current_eps else "N/A"
-        eps_metric = DashboardMetric(
-            label="EPS",
-            value=eps_value,
-            change=round(estimated_eps_change, 2),
-            change_type="up" if estimated_eps_change >= 0 else "down"
-        )
-        
-        total_revenue = info.get('totalRevenue', 0)
-        
-        if total_revenue is not None and total_revenue > 0 and len(hist_data_2y) >= 252:
-            price_1y_ago = hist_data_2y['Close'].iloc[0]
-            current_price = hist_data_1y['Close'].iloc[-1]
-            revenue_change = ((current_price - price_1y_ago) / price_1y_ago) * 100
-        else:
-            revenue_change = 0
-        
-        revenue_value = f"${total_revenue / 1e9:.2f}B" if total_revenue else "N/A"
-        revenue_metric = DashboardMetric(
-            label="Revenue",
-            value=revenue_value,
-            change=round(revenue_change, 2),
-            change_type="up" if revenue_change >= 0 else "down"
-        )
-        
-        if len(hist_data_1y) >= 2:
-            today_close = hist_data_1y['Close'].iloc[-1]
-            yesterday_close = hist_data_1y['Close'].iloc[-2]
-            daily_move_percent = ((today_close - yesterday_close) / yesterday_close) * 100
-        else:
-            daily_move_percent = 0
-        
-        daily_move_metric = DashboardMetric(
-            label="Daily % Move",
-            value=f"{daily_move_percent:.0f}%",
-            change=round(daily_move_percent, 2),
-            change_type="up" if daily_move_percent >= 0 else "down"
-        )
-        
-        return DashboardTopResponse(
-            market_cap=market_cap_metric,
-            eps=eps_metric,
-            revenue=revenue_metric,
-            daily_move=daily_move_metric
-        )
-    
+        hist_data = yf.download(tickers=ticker, period="1y", progress=False)
+
+        market_cap = info.get('marketCap')
+        market_cap_value = f"${market_cap / 1e9:.1f}B" if market_cap else "N/A"
+        price_change_1y = 0
+        if len(hist_data) >= 252:
+            price_1y_ago = hist_data['Close'].iloc[0]
+            current_price = hist_data['Close'].iloc[-1]
+            price_change_1y = ((current_price - price_1y_ago) / price_1y_ago) * 100
+        market_cap_metric = DashboardMetric(label="Market Cap", value=market_cap_value, change=round(price_change_1y, 2), change_type="up" if price_change_1y >= 0 else "down")
+
+        eps = info.get('trailingEps')
+        eps_value = f"${eps:.2f}" if eps is not None else "N/A"
+        eps_change = info.get('earningsQuarterlyGrowth', 0.0) * 100 if info.get('earningsQuarterlyGrowth') else 0.0
+        eps_metric = DashboardMetric(label="EPS", value=eps_value, change=round(eps_change, 2), change_type="up" if eps_change >= 0 else "down")
+
+        revenue = info.get('totalRevenue')
+        revenue_value = f"${revenue / 1e9:.2f}B" if revenue else "N/A"
+        revenue_change = info.get('revenueGrowth', 0.0) * 100 if info.get('revenueGrowth') else 0.0
+        revenue_metric = DashboardMetric(label="Revenue", value=revenue_value, change=round(revenue_change, 2), change_type="up" if revenue_change >= 0 else "down")
+
+        daily_move_percent = 0
+        if len(hist_data) >= 2:
+            daily_move_percent = hist_data['Close'].pct_change().iloc[-1] * 100
+        daily_move_metric = DashboardMetric(label="Daily % Move", value=f"{daily_move_percent:.2f}%", change=round(daily_move_percent, 2), change_type="up" if daily_move_percent >= 0 else "down")
+
+        return DashboardTopResponse(market_cap=market_cap_metric, eps=eps_metric, revenue=revenue_metric, daily_move=daily_move_metric)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"An error occurred while fetching dashboard data: {str(e)}")

@@ -215,7 +215,7 @@ async def get_ai_summary():
         if GOOGLE_API_KEY == "YOUR_GOOGLE_API_KEY":
             raise HTTPException(status_code=500, detail="Google AI API key not configured.")
         
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        model = genai.GenerativeModel('gemini-2.0-flash')
         response = model.generate_content(prompt)
         
         return SummaryResponse(summary=response.text)
@@ -234,11 +234,11 @@ async def get_dashboard_top():
         hist_data_2y = yf.download(tickers=ticker, period="2y", progress=False)
         
         current_market_cap = info.get('marketCap', 0)
-        if current_market_cap and len(hist_data_2y) >= 252:
+        if current_market_cap is not None and current_market_cap > 0 and len(hist_data_2y) >= 252:
             price_1y_ago = hist_data_2y['Close'].iloc[0]
             current_price = hist_data_1y['Close'].iloc[-1]
             shares_outstanding = info.get('sharesOutstanding', 0)
-            if shares_outstanding and price_1y_ago > 0:
+            if shares_outstanding is not None and shares_outstanding > 0 and price_1y_ago > 0:
                 market_cap_1y_ago = price_1y_ago * shares_outstanding
                 market_cap_change = ((current_market_cap - market_cap_1y_ago) / market_cap_1y_ago) * 100
             else:
@@ -258,7 +258,7 @@ async def get_dashboard_top():
         forward_eps = info.get('forwardEps', None)
         current_eps = trailing_eps if trailing_eps else forward_eps
         
-        if current_eps:
+        if current_eps is not None and current_eps > 0:
             hist_data_5y = yf.download(tickers=ticker, period="5y", progress=False)
             if len(hist_data_5y) >= 252:
                 old_price = hist_data_5y['Close'].iloc[0]
@@ -280,7 +280,7 @@ async def get_dashboard_top():
         
         total_revenue = info.get('totalRevenue', 0)
         
-        if total_revenue and len(hist_data_2y) >= 252:
+        if total_revenue is not None and total_revenue > 0 and len(hist_data_2y) >= 252:
             price_1y_ago = hist_data_2y['Close'].iloc[0]
             current_price = hist_data_1y['Close'].iloc[-1]
             revenue_change = ((current_price - price_1y_ago) / price_1y_ago) * 100

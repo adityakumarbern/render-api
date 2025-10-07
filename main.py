@@ -61,6 +61,18 @@ class AnalysisChartResponse(BaseModel):
 class SummaryResponse(BaseModel):
     summary: str
 
+class DashboardMetric(BaseModel):
+    label: str
+    value: str
+    change: float
+    change_type: str
+
+class DashboardTopResponse(BaseModel):
+    market_cap: DashboardMetric
+    eps: DashboardMetric
+    revenue: DashboardMetric
+    daily_move: DashboardMetric
+
 KEY_EVENTS_DATA = [
     {"date": "2024-10-17", "source": "Bloomberg.com", "headline": "Otsuka Is Said to Weigh Sale of Stake in Medical Device Maker MicroPort Scientific", "url": "https://www.bloomberg.com/news/articles/2024-10-17/otsuka-weighs-sale-of-stake-in-medical-device-maker-microport-scientific"},
     {"date": "2025-03-31", "source": "simplywall.st", "headline": "MicroPort Scientific Full Year 2024 Earnings: EPS Beats Expectations, Revenues Lag", "url": "https://simplywall.st/stocks/hk/healthcare/hkg-853/microport-scientific-shares/news/microport-scientific-full-year-2024-earnings-eps-beats-expec"},
@@ -203,10 +215,106 @@ async def get_ai_summary():
         if GOOGLE_API_KEY == "YOUR_GOOGLE_API_KEY":
             raise HTTPException(status_code=500, detail="Google AI API key not configured.")
         
-        model = genai.GenerativeModel('gemini-2.0-flash')
+        model = genai.GenerativeModel('gemini-1.5-flash')
         response = model.generate_content(prompt)
         
         return SummaryResponse(summary=response.text)
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"An error occurred while generating the AI summary: {str(e)}")
+
+@app.get("/dashboard/top", response_model=DashboardTopResponse)
+async def get_dashboard_top():
+    try:
+        ticker = "0853.HK"
+        stock = yf.Ticker(ticker)
+        info = stock.info
+        
+        hist_data_1y = yf.download(tickers=ticker, period="1y", progress=False)
+        hist_data_2y = yf.download(tickers=ticker, period="2y", progress=False)
+        
+        current_market_cap = info.get('marketCap', 0)
+        if current_market_cap and len(hist_data_2y) >= 252:
+            price_1y_ago = hist_data_2y['Close'].iloc[0]
+            current_price = hist_data_1y['Close'].iloc[-1]
+            shares_outstanding = info.get('sharesOutstanding', 0)
+            if shares_outstanding and price_1y_ago > 0:
+                market_cap_1y_ago = price_1y_ago * shares_outstanding
+                market_cap_change = ((current_market_cap - market_cap_1y_ago) / market_cap_1y_ago) * 100
+            else:
+                market_cap_change = 0
+        else:
+            market_cap_change = 0
+        
+        market_cap_value = f"${current_market_cap / 1e9:.1f}B" if current_market_cap else "N/A"
+        market_cap_metric = DashboardMetric(
+            label="Market Cap",
+            value=market_cap_value,
+            change=round(market_cap_change, 2),
+            change_type="up" if market_cap_change >= 0 else "down"
+        )
+        
+        trailing_eps = info.get('trailingEps', None)
+        forward_eps = info.get('forwardEps', None)
+        current_eps = trailing_eps if trailing_eps else forward_eps
+        
+        if current_eps:
+            hist_data_5y = yf.download(tickers=ticker, period="5y", progress=False)
+            if len(hist_data_5y) >= 252:
+                old_price = hist_data_5y['Close'].iloc[0]
+                current_price = hist_data_1y['Close'].iloc[-1]
+                estimated_eps_change = ((current_price - old_price) / old_price) * 100
+            else:
+                estimated_eps_change = 0
+        else:
+            current_eps = 0
+            estimated_eps_change = 0
+        
+        eps_value = f"${current_eps:.2f}" if current_eps else "N/A"
+        eps_metric = DashboardMetric(
+            label="EPS",
+            value=eps_value,
+            change=round(estimated_eps_change, 2),
+            change_type="up" if estimated_eps_change >= 0 else "down"
+        )
+        
+        total_revenue = info.get('totalRevenue', 0)
+        
+        if total_revenue and len(hist_data_2y) >= 252:
+            price_1y_ago = hist_data_2y['Close'].iloc[0]
+            current_price = hist_data_1y['Close'].iloc[-1]
+            revenue_change = ((current_price - price_1y_ago) / price_1y_ago) * 100
+        else:
+            revenue_change = 0
+        
+        revenue_value = f"${total_revenue / 1e9:.2f}B" if total_revenue else "N/A"
+        revenue_metric = DashboardMetric(
+            label="Revenue",
+            value=revenue_value,
+            change=round(revenue_change, 2),
+            change_type="up" if revenue_change >= 0 else "down"
+        )
+        
+        if len(hist_data_1y) >= 2:
+            today_close = hist_data_1y['Close'].iloc[-1]
+            yesterday_close = hist_data_1y['Close'].iloc[-2]
+            daily_move_percent = ((today_close - yesterday_close) / yesterday_close) * 100
+        else:
+            daily_move_percent = 0
+        
+        daily_move_metric = DashboardMetric(
+            label="Daily % Move",
+            value=f"{daily_move_percent:.0f}%",
+            change=round(daily_move_percent, 2),
+            change_type="up" if daily_move_percent >= 0 else "down"
+        )
+        
+        return DashboardTopResponse(
+            market_cap=market_cap_metric,
+            eps=eps_metric,
+            revenue=revenue_metric,
+            daily_move=daily_move_metric
+        )
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"An error occurred while fetching dashboard data: {str(e)}")

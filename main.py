@@ -234,28 +234,34 @@ async def get_dashboard_top():
 
         market_cap = info.get('marketCap')
         market_cap_value = f"${market_cap / 1e9:.1f}B" if market_cap else "N/A"
-        price_change_1y = 0
-        if len(hist_data) >= 252:
+        price_change_1y = 0.0
+        if not hist_data.empty and len(hist_data) >= 252:
             price_1y_ago = hist_data['Close'].iloc[0]
             current_price = hist_data['Close'].iloc[-1]
-            price_change_1y = ((current_price - price_1y_ago) / price_1y_ago) * 100
+            if price_1y_ago:
+                price_change_1y = ((current_price - price_1y_ago) / price_1y_ago) * 100
         market_cap_metric = DashboardMetric(label="Market Cap", value=market_cap_value, change=round(price_change_1y, 2), change_type="up" if price_change_1y >= 0 else "down")
 
         eps = info.get('trailingEps')
         eps_value = f"${eps:.2f}" if eps is not None else "N/A"
-        eps_change = info.get('earningsQuarterlyGrowth', 0.0) * 100 if info.get('earningsQuarterlyGrowth') else 0.0
+        eps_change_raw = info.get('earningsQuarterlyGrowth')
+        eps_change = eps_change_raw * 100 if eps_change_raw is not None else 0.0
         eps_metric = DashboardMetric(label="EPS", value=eps_value, change=round(eps_change, 2), change_type="up" if eps_change >= 0 else "down")
 
         revenue = info.get('totalRevenue')
         revenue_value = f"${revenue / 1e9:.2f}B" if revenue else "N/A"
-        revenue_change = info.get('revenueGrowth', 0.0) * 100 if info.get('revenueGrowth') else 0.0
+        revenue_change_raw = info.get('revenueGrowth')
+        revenue_change = revenue_change_raw * 100 if revenue_change_raw is not None else 0.0
         revenue_metric = DashboardMetric(label="Revenue", value=revenue_value, change=round(revenue_change, 2), change_type="up" if revenue_change >= 0 else "down")
-
-        daily_move_percent = 0
-        if len(hist_data) >= 2:
-            daily_move_percent = hist_data['Close'].pct_change().iloc[-1] * 100
+        
+        daily_move_percent = 0.0
+        if not hist_data.empty and len(hist_data) >= 2:
+            daily_move_scalar = hist_data['Close'].pct_change().iloc[-1]
+            if pd.notna(daily_move_scalar):
+                daily_move_percent = daily_move_scalar * 100
         daily_move_metric = DashboardMetric(label="Daily % Move", value=f"{daily_move_percent:.2f}%", change=round(daily_move_percent, 2), change_type="up" if daily_move_percent >= 0 else "down")
 
         return DashboardTopResponse(market_cap=market_cap_metric, eps=eps_metric, revenue=revenue_metric, daily_move=daily_move_metric)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"An error occurred while fetching dashboard data: {str(e)}")
+

@@ -224,7 +224,7 @@ async def get_ai_summary():
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"An error occurred while generating the AI summary: {str(e)}")
 
-@app.get("/dashboard/top"), response_model=DashboardTopResponse)
+@app.get("/dashboard/top", response_model=DashboardTopResponse)
 async def get_top_dashboard_data():
 
     try:

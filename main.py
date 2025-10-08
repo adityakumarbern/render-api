@@ -245,22 +245,28 @@ async def get_top_dashboard_data():
             if abs(num) >= 1_000_000:
                 return f"${num / 1_000_000:.2f}M"
             return f"${num:,.2f}"
+        
+        def to_percentage_float(value: Optional[float]) -> float:
+            if value is None or pd.isna(value):
+                return 0.0
+            return float(value * 100)
 
         response_data = {
             "market_cap": {
                 "value": format_large_number(info.get('marketCap')),
-                "percent_change": daily_move
+                "percent_change": to_percentage_float(daily_move)
             },
             "eps": {
                 "value": f"${info.get('trailingEps', 0):.2f}",
-                "percent_change": info.get('earningsQuarterlyGrowth') or 0
+                "percent_change": to_percentage_float(info.get('earningsQuarterlyGrowth'))
             },
             "revenue": {
                 "value": format_large_number(info.get('totalRevenue')),
-                "percent_change": info.get('revenueGrowth') or 0
+                "percent_change": to_percentage_float(info.get('revenueGrowth'))
             },
-            "daily_percent_move": daily_move
+            "daily_percent_move": to_percentage_float(daily_move)
         }
+        
         
         return response_data
         

@@ -226,6 +226,7 @@ async def get_ai_summary():
 
 @app.get("/dashboard/top", response_model=DashboardTopResponse)
 async def get_top_dashboard_data():
+
     try:
         ticker_symbol = "0853.HK"
         ticker = yf.Ticker(ticker_symbol)
@@ -235,49 +236,30 @@ async def get_top_dashboard_data():
         if hist.empty or len(hist) < 2:
             raise HTTPException(status_code=404, detail="Not enough historical data for daily move calculation.")
         
-        daily_move_series = hist['Close'].pct_change().tail(1)
-        
-        if not daily_move_series.empty:
-            daily_move = daily_move_series.iloc[0]
-            if pd.isna(daily_move):
-                daily_move = None
-        else:
-            daily_move = None
-
-        def to_percentage_float(value: Optional[float]) -> float:
-            if value is None or pd.isna(value):
-                return 0.0
-            return float(value * 100)
+        daily_move = hist['Close'].pct_change().iloc[-1]
 
         def format_large_number(num: Optional[float]) -> str:
-            if num is None or pd.isna(num):
-                return "N/A"
+            if num is None: return "N/A"
             if abs(num) >= 1_000_000_000:
                 return f"${num / 1_000_000_000:.2f}B"
             if abs(num) >= 1_000_000:
                 return f"${num / 1_000_000:.2f}M"
             return f"${num:,.2f}"
 
-        eps_value = info.get('trailingEps')
-        if eps_value is not None and not pd.isna(eps_value):
-            eps_formatted = f"${eps_value:.2f}"
-        else:
-            eps_formatted = "N/A"
-
         response_data = {
             "market_cap": {
                 "value": format_large_number(info.get('marketCap')),
-                "percent_change": to_percentage_float(daily_move)
+                "percent_change": daily_move
             },
             "eps": {
-                "value": eps_formatted,
-                "percent_change": to_percentage_float(info.get('earningsQuarterlyGrowth'))
+                "value": f"${info.get('trailingEps', 0):.2f}",
+                "percent_change": info.get('earningsQuarterlyGrowth') or 0
             },
             "revenue": {
                 "value": format_large_number(info.get('totalRevenue')),
-                "percent_change": to_percentage_float(info.get('revenueGrowth'))
+                "percent_change": info.get('revenueGrowth') or 0
             },
-            "daily_percent_move": to_percentage_float(daily_move)
+            "daily_percent_move": daily_move
         }
         
         return response_data

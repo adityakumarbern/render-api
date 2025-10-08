@@ -245,27 +245,21 @@ async def get_top_dashboard_data():
             if abs(num) >= 1_000_000:
                 return f"${num / 1_000_000:.2f}M"
             return f"${num:,.2f}"
-        
-        def format_percentage(num: Optional[float]) -> str:
-            if num is None:
-                return "0.00%"
-            percent_value = num * 100
-            return f"{percent_value:+.2f}%"
 
         response_data = {
             "market_cap": {
                 "value": format_large_number(info.get('marketCap')),
-                "percent_change": format_percentage(daily_move)
+                "percent_change": daily_move
             },
             "eps": {
                 "value": f"${info.get('trailingEps', 0):.2f}",
-                "percent_change": format_percentage(info.get('earningsQuarterlyGrowth'))
+                "percent_change": info.get('earningsQuarterlyGrowth') or 0
             },
             "revenue": {
                 "value": format_large_number(info.get('totalRevenue')),
-                "percent_change": format_percentage(info.get('revenueGrowth'))
+                "percent_change": info.get('revenueGrowth') or 0
             },
-            "daily_percent_move": format_percentage(daily_move)
+            "daily_percent_move": daily_move
         }
         
         return response_data

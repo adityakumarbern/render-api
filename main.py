@@ -236,7 +236,15 @@ async def get_top_dashboard_data():
         if hist.empty or len(hist) < 2:
             raise HTTPException(status_code=404, detail="Not enough historical data for daily move calculation.")
         
-        daily_move = hist['Close'].pct_change().iloc[-1]
+       
+        daily_move_series = hist['Close'].pct_change().tail(1)
+        daily_move = daily_move_series.item() if not daily_move_series.empty else None
+
+        def to_percentage_float(value: Optional[float]) -> float:
+            if value is None or pd.isna(value):
+                return 0.0
+            return float(value * 100)
+
 
         def format_large_number(num: Optional[float]) -> str:
             if num is None: return "N/A"
@@ -245,11 +253,6 @@ async def get_top_dashboard_data():
             if abs(num) >= 1_000_000:
                 return f"${num / 1_000_000:.2f}M"
             return f"${num:,.2f}"
-        
-        def to_percentage_float(value: Optional[float]) -> float:
-            if value is None or pd.isna(value):
-                return 0.0
-            return float(value * 100)
 
         response_data = {
             "market_cap": {
@@ -266,7 +269,6 @@ async def get_top_dashboard_data():
             },
             "daily_percent_move": to_percentage_float(daily_move)
         }
-        
         
         return response_data
         

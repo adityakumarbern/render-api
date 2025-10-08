@@ -6,6 +6,25 @@ import google.generativeai as genai
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from typing import Optional, List, Dict
+from fastapi.middleware.cors import CORSMiddleware
+
+origins = [
+    "http://localhost:3000",  # Example: your frontend running on localhost:3000
+    "https://cheerful-bonbon-b864ae.netlify.app", # Example: your deployed frontend domain
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,  # List of allowed origins
+    allow_credentials=True, # Allow cookies to be included in cross-origin requests
+    allow_methods=["*"],    # Allow all HTTP methods (GET, POST, PUT, DELETE, etc.)
+    allow_headers=["*"],    # Allow all headers
+)
+
+
+
+
+
 
 NEWS_API_KEY = os.getenv("NEWS_API_KEY", "YOUR_NEWS_API_KEY")
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY", "YOUR_GOOGLE_API_KEY")

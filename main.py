@@ -61,17 +61,17 @@ class AnalysisChartResponse(BaseModel):
 class SummaryResponse(BaseModel):
     summary: str
 
-# --- START: Models for Dashboard Endpoint (Updated Response Type) ---
+# --- START: New Models for Dashboard Endpoint ---
 class Metric(BaseModel):
     value: str
-    percent_change: str # Changed from float to str
+    percent_change: float
 
 class DashboardTopResponse(BaseModel):
     market_cap: Metric
     eps: Metric
     revenue: Metric
-    daily_percent_move: str # Changed from float to str
-# --- END: Models for Dashboard Endpoint ---
+    daily_percent_move: float
+# --- END: New Models for Dashboard Endpoint ---
 
 
 KEY_EVENTS_DATA = [
@@ -224,7 +224,7 @@ async def get_ai_summary():
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"An error occurred while generating the AI summary: {str(e)}")
 
-@app.get("/dashboard/top", response_model=DashboardTopResponse)
+@app.get("/dashboard/top"), response_model=DashboardTopResponse)
 async def get_top_dashboard_data():
 
     try:
@@ -245,29 +245,28 @@ async def get_top_dashboard_data():
             if abs(num) >= 1_000_000:
                 return f"${num / 1_000_000:.2f}M"
             return f"${num:,.2f}"
-
         
-        market_cap_pc = daily_move
-        eps_pc = info.get('earningsQuarterlyGrowth') or 0
-        revenue_pc = info.get('revenueGrowth') or 0
-        daily_move_pc = daily_move
+        def format_percentage(num: Optional[float]) -> str:
+            if num is None:
+                return "0.00%"
+            percent_value = num * 100
+            return f"{percent_value:+.2f}%"
 
         response_data = {
             "market_cap": {
                 "value": format_large_number(info.get('marketCap')),
-                "percent_change": f"{market_cap_pc * 100:.2f}%"
+                "percent_change": format_percentage(daily_move)
             },
             "eps": {
                 "value": f"${info.get('trailingEps', 0):.2f}",
-                "percent_change": f"{eps_pc * 100:.2f}%"
+                "percent_change": format_percentage(info.get('earningsQuarterlyGrowth'))
             },
             "revenue": {
                 "value": format_large_number(info.get('totalRevenue')),
-                "percent_change": f"{revenue_pc * 100:.2f}%"
+                "percent_change": format_percentage(info.get('revenueGrowth'))
             },
-            "daily_percent_move": f"{daily_move_pc * 100:.2f}%"
+            "daily_percent_move": format_percentage(daily_move)
         }
-       
         
         return response_data
         

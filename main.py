@@ -29,16 +29,16 @@ app = FastAPI(
 )
 
 origins = [
-    "http://localhost:3000",  # Example: your frontend running on localhost:3000
-    "https://cheerful-bonbon-b864ae.netlify.app", # Example: your deployed frontend domain
+    "http://localhost:3000",  
+    "https://cheerful-bonbon-b864ae.netlify.app", 
 ]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,  # List of allowed origins
-    allow_credentials=True, # Allow cookies to be included in cross-origin requests
-    allow_methods=["*"],    # Allow all HTTP methods (GET, POST, PUT, DELETE, etc.)
-    allow_headers=["*"],    # Allow all headers
+    allow_origins=origins, 
+    allow_credentials=True, 
+    allow_methods=["*"],    
+    allow_headers=["*"],   
 )
 
 
